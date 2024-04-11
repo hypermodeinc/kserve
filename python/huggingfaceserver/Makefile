@@ -13,5 +13,5 @@ export_requirements:
 	poetry export -f requirements.txt --output requirements.txt --without-hashes
 
 build-docker:
-	docker build --platform linux/amd64 -t $(IMG) -f huggingface_server.Dockerfile ..
+	docker build --platform linux/amd64 -t $(IMG) -f ../huggingface_server.Dockerfile ..
 

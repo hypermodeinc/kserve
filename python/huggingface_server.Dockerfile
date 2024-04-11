@@ -22,14 +22,14 @@ RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 COPY kserve/pyproject.toml kserve/poetry.lock kserve/
-RUN cd kserve && poetry install --no-root --no-interaction --no-cache
+RUN cd kserve && poetry install --all-extras --no-root --no-interaction --no-cache
 COPY kserve kserve
-RUN cd kserve && poetry install --no-interaction --no-cache
+RUN cd kserve && poetry install --all-extras --no-interaction --no-cache
 
 COPY huggingfaceserver/pyproject.toml huggingfaceserver/poetry.lock huggingfaceserver/
-RUN cd huggingfaceserver && poetry install --no-root --no-interaction --no-cache
+RUN cd huggingfaceserver && poetry install --all-extras --no-root --no-interaction --no-cache
 COPY huggingfaceserver huggingfaceserver
-RUN cd huggingfaceserver && poetry install --no-interaction --no-cache
+RUN cd huggingfaceserver && poetry install --all-extras --no-interaction --no-cache
 
 RUN pip3 install vllm==${VLLM_VERSION}
 
