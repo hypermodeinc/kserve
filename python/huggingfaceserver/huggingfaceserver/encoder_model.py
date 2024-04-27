@@ -16,6 +16,7 @@ import pathlib
 from typing import Any, Dict, Optional, Union
 
 import torch
+import torch.nn.functional as F
 from accelerate import init_empty_weights
 from kserve import Model
 from kserve.errors import InferenceError
@@ -215,6 +216,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
                 truncation=True,
             )
             context["payload"] = payload
+            context["inputs"] = inputs
             context["input_ids"] = inputs["input_ids"]
             return inputs
 
@@ -231,7 +233,10 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             input_batch = input_batch.to(self._device)
             try:
                 with torch.no_grad():
-                    outputs = self._model(**input_batch).logits
+                    if self.task == MLTask.text_embedding.value:
+                        outputs = self._model(**input_batch)
+                    else:
+                        outputs = self._model(**input_batch).logits
                     return outputs
             except Exception as e:
                 raise InferenceError(str(e))
@@ -286,7 +291,22 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
                 predictions = torch.argmax(output, dim=2)
                 inferences.append(predictions.tolist())
             return get_predict_response(request, inferences, self.name)
+        elif self.task == MLTask.text_embedding.value:
+            # Perform pooling
+            outputs = mean_pooling(outputs, context["inputs"]["attention_mask"])
+            # Normalize embeddings
+            outputs = F.normalize(outputs, p=2, dim=1)
+            num_rows, _ = outputs.shape
+            for i in range(num_rows):
+                inferences.append(outputs[i].tolist())
+            return get_predict_response(request, inferences, self.name)
         else:
             raise ValueError(
                 f"Unsupported task {self.task}. Please check the supported `task` option."
             )
+
+# Mean Pooling - Take attention mask into account for correct averaging
+def mean_pooling(model_output, attention_mask):
+    token_embeddings = model_output[0] #First element of model_output contains all token embeddings
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)

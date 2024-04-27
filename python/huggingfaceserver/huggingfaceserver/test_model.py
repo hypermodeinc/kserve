@@ -14,6 +14,8 @@
 
 import pytest
 
+import torch.nn.functional as F
+import torch
 from kserve.model import PredictorConfig
 from kserve.protocol.rest.openai import ChatCompletionRequest, CompletionRequest
 from kserve.protocol.rest.openai.types import (
@@ -83,6 +85,17 @@ def bert_token_classification():
         model_id_or_path="dbmdz/bert-large-cased-finetuned-conll03-english",
         do_lower_case=True,
         add_special_tokens=False,
+    )
+    model.load()
+    yield model
+    model.stop()
+
+@pytest.fixture(scope="module")
+def text_embedding():
+    model = HuggingfaceEncoderModel(
+        "mxbai-embed-large-v1",
+        model_id_or_path="mixedbread-ai/mxbai-embed-large-v1",
+        task=MLTask.text_embedding,
     )
     model.load()
     yield model
@@ -234,6 +247,27 @@ async def test_bert_token_classification(bert_token_classification):
         ]
     }
 
+@pytest.mark.asyncio
+async def test_text_embedding(text_embedding):
+    def cosine_similarity(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+        if len(a.shape) == 1:
+            a = a.unsqueeze(0)
+
+        if len(b.shape) == 1:
+            b = b.unsqueeze(0)
+
+        a_norm = F.normalize(a, p=2, dim=1)
+        b_norm = F.normalize(b, p=2, dim=1)
+        return torch.mm(a_norm, b_norm.transpose(0, 1))
+
+    requests = ["I'm happy", "I'm full of happiness", "They were born in the capital city of France, Paris"]
+    response = await text_embedding({"instances": requests}, headers={})
+    predictions = response["predictions"]
+
+    print(cosine_similarity(torch.tensor(predictions[0]), torch.tensor(predictions[1]))[0])
+    print(cosine_similarity(torch.tensor(predictions[0]), torch.tensor(predictions[2]))[0])
+    assert cosine_similarity(torch.tensor(predictions[0]), torch.tensor(predictions[1]))[0] > 0.9
+    assert cosine_similarity(torch.tensor(predictions[0]), torch.tensor(predictions[2]))[0] < 0.6
 
 @pytest.mark.asyncio
 async def test_bloom_completion(bloom_model: HuggingfaceGenerativeModel):
