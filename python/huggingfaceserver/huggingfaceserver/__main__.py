@@ -237,6 +237,7 @@ def load_model():
                 tensor_input_names=kwargs.get("tensor_input_names", None),
                 return_token_type_ids=kwargs.get("return_token_type_ids", None),
                 predictor_config=predictor_config,
+                classification_labels=kwargs.get("classification_labels", None)
             )
     model.load()
     return model

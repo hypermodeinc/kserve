@@ -5,6 +5,12 @@ The preprocess and post-process handlers are implemented based on different ML t
 token-classification, text-generation, text2text generation. Based on the performance requirement, you can choose to perform
 the inference on a more optimized inference engine like triton inference server and vLLM for text generation.
 
+## Build Container Image Locally
+
+The Dockerfile exists in the parent directory
+```bash
+docker build --platform linux/amd64 -t hypermode/huggingface-model-server:latest -f huggingface_server.Dockerfile ..
+```
 
 ## Run HuggingFace Server Locally
 

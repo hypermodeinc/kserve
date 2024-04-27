@@ -34,6 +34,7 @@ from transformers import (
     AutoModel,
     AutoTokenizer,
     BatchEncoding,
+    pipeline,
     PreTrainedModel,
     PreTrainedTokenizerBase,
     PretrainedConfig,
@@ -83,6 +84,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
         trust_remote_code: bool = False,
         return_probabilities: bool = False,
         predictor_config: Optional[PredictorConfig] = None,
+        classification_labels: Optional[Dict[int, str]] = None,
     ):
         super().__init__(model_name, predictor_config)
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -97,6 +99,8 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
         self.tokenizer_revision = tokenizer_revision
         self.trust_remote_code = trust_remote_code
         self.return_probabilities = return_probabilities
+        self.classification_labels = classification_labels
+        self.nlp = None
 
         if model_config:
             self.model_config = model_config
@@ -137,6 +141,9 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
 
         if self._model._no_split_modules:
             device_map = "auto"
+        # somehow, setting it to True give worse results for NER task
+        if self.task == MLTask.token_classification.value:
+            self.do_lower_case = False
 
         tokenizer_kwargs = {}
         model_kwargs = {}
@@ -177,6 +184,8 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
                 # When adding new tokens to the vocabulary, we should make sure to also resize the token embedding
                 # matrix of the model so that its embedding matrix matches the tokenizer.
                 self._model.resize_token_embeddings(len(self._tokenizer))
+            if self.task == MLTask.token_classification:
+                self.nlp = pipeline("ner", model=self._model, tokenizer=self._tokenizer)
             logger.info(
                 f"Successfully loaded huggingface model from path {model_id_or_path}"
             )
@@ -201,6 +210,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
                 truncation=True,
             )
             context["payload"] = payload
+            context["inputs"] = inputs
             context["input_ids"] = inputs["input_ids"]
             if self.task == MLTask.text_embedding:
                 context["attention_mask"] = inputs["attention_mask"]
@@ -219,6 +229,12 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             )
             return infer_request
         else:
+            if self.task == MLTask.token_classification.value:
+                context["payload"] = payload
+                context["inputs"] = instances
+                context["input_ids"] = []
+                return instances
+
             inputs = self._tokenizer(
                 instances,
                 max_length=self.max_length,
@@ -229,6 +245,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
                 truncation=True,
             )
             context["payload"] = payload
+            context["inputs"] = inputs
             context["input_ids"] = inputs["input_ids"]
             if self.task == MLTask.text_embedding:
                 context["attention_mask"] = inputs["attention_mask"]
@@ -244,8 +261,12 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             # like NVIDIA triton inference server
             return await super().predict(input_batch, context)
         else:
-            input_batch = input_batch.to(self._device)
             try:
+                if self.task == MLTask.token_classification:
+                    with torch.no_grad():
+                        return self.nlp(input_batch)
+                
+                input_batch = input_batch.to(self._device)
                 with torch.no_grad():
                     outputs = self._model(**input_batch)
                     if self.task == MLTask.text_embedding.value:
@@ -269,14 +290,32 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             input_ids = torch.Tensor(input_ids)
         inferences = []
         if self.task == MLTask.sequence_classification:
-            num_rows, num_cols = outputs.shape
+            outputs = torch.nn.functional.softmax(outputs, dim = -1).detach()
+            max_indices = torch.argmax(outputs, dim=1).tolist()
+            final = outputs.tolist()
+
+            id2label = {0: 0, 1: 1}
+            if self.classification_labels:
+                id2label = {i: val for i, val in enumerate(self.classification_labels)}
+
+            num_rows, _ = outputs.shape
             for i in range(num_rows):
                 out = outputs[i].unsqueeze(0)
                 if self.return_probabilities:
                     inferences.append(dict(enumerate(out.numpy().flatten())))
                 else:
-                    predicted_idx = out.argmax().item()
-                    inferences.append(predicted_idx)
+                    max_id = max_indices[i]
+                    res = {
+                        "label": id2label[max_id],
+                        "confidence": final[i][max_id],
+                        "probabilities": [
+                            {
+                                "label": id2label[j],
+                                "probability": final[i][j]
+                            } for j in range(len(final[i]))
+                        ]
+                    }
+                    inferences.append(res)
             return get_predict_response(request, inferences, self.name)
         elif self.task == MLTask.fill_mask:
             num_rows = outputs.shape[0]
@@ -298,7 +337,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
                     inferences.append(self._tokenizer.decode(predicted_token_id))
             return get_predict_response(request, inferences, self.name)
         elif self.task == MLTask.token_classification:
-            num_rows = outputs.shape[0]
+            num_rows = len(outputs)
             for i in range(num_rows):
                 output = outputs[i].unsqueeze(0)
                 if self.return_probabilities:
@@ -322,3 +361,9 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             raise ValueError(
                 f"Unsupported task {self.task}. Please check the supported `task` option."
             )
+
+# Mean Pooling - Take attention mask into account for correct averaging
+def mean_pooling(model_output, attention_mask):
+    token_embeddings = model_output[0] #First element of model_output contains all token embeddings
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
