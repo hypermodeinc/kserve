@@ -241,9 +241,24 @@ async def test_bert_token_classification(bert_token_classification):
         {"instances": [request, request]}, headers={}
     )
     assert response == {
-        "predictions": [
-            [[0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            [[0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+        'predictions': [
+            [
+                {'entity': 'I-ORG', 'score': 0.9972999691963196, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2},
+                {'entity': 'I-ORG', 'score': 0.9716504216194153, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7},
+                {'entity': 'I-ORG', 'score': 0.9962745904922485, 'index': 3, 'word': '##F', 'start': 7, 'end': 8},
+                {'entity': 'I-ORG', 'score': 0.993005096912384, 'index': 4, 'word': '##ace', 'start': 8, 'end': 11},
+                {'entity': 'I-LOC', 'score': 0.9940695762634277, 'index': 10, 'word': 'Paris', 'start': 34, 'end': 39},
+                {'entity': 'I-LOC', 'score': 0.9982321858406067, 'index': 12, 'word': 'New', 'start': 44, 'end': 47},
+                {'entity': 'I-LOC', 'score': 0.9975290894508362, 'index': 13, 'word': 'York', 'start': 48, 'end': 52}
+            ], 
+            [
+                {'entity': 'I-ORG', 'score': 0.9972999691963196, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2},
+                {'entity': 'I-ORG', 'score': 0.9716504216194153, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7},
+                {'entity': 'I-ORG', 'score': 0.9962745904922485, 'index': 3, 'word': '##F', 'start': 7, 'end': 8},
+                {'entity': 'I-ORG', 'score': 0.993005096912384, 'index': 4, 'word': '##ace', 'start': 8, 'end': 11},
+                {'entity': 'I-LOC', 'score': 0.9940695762634277, 'index': 10, 'word': 'Paris', 'start': 34, 'end': 39},
+                {'entity': 'I-LOC', 'score': 0.9982321858406067, 'index': 12, 'word': 'New', 'start': 44, 'end': 47},
+                {'entity': 'I-LOC', 'score': 0.9975290894508362, 'index': 13, 'word': 'York', 'start': 48, 'end': 52}]
         ]
     }
 

@@ -34,6 +34,7 @@ from transformers import (
     AutoModel,
     AutoTokenizer,
     BatchEncoding,
+    pipeline,
     PreTrainedModel,
     PreTrainedTokenizerBase,
     PretrainedConfig,
@@ -94,6 +95,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
         self.tokenizer_revision = tokenizer_revision
         self.trust_remote_code = trust_remote_code
         self.classification_labels = classification_labels
+        self.nlp = None
 
         if model_config:
             self.model_config = model_config
@@ -134,6 +136,9 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
 
         if self._model._no_split_modules:
             device_map = "auto"
+        # somehow, setting it to True give worse results for NER task
+        if self.task == MLTask.token_classification.value:
+            self.do_lower_case = False
 
         tokenizer_kwargs = {}
         model_kwargs = {}
@@ -165,6 +170,8 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             )
             self._model.eval()
             self._model.to(self._device)
+            if self.task == MLTask.token_classification:
+                self.nlp = pipeline("ner", model=self._model, tokenizer=self._tokenizer)
             logger.info(
                 f"Successfully loaded huggingface model from path {model_id_or_path}"
             )
@@ -190,6 +197,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
                 truncation=True,
             )
             context["payload"] = payload
+            context["inputs"] = inputs
             context["input_ids"] = inputs["input_ids"]
             infer_inputs = []
             for key, input_tensor in inputs.items():
@@ -206,6 +214,12 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             )
             return infer_request
         else:
+            if self.task == MLTask.token_classification.value:
+                context["payload"] = payload
+                context["inputs"] = instances
+                context["input_ids"] = []
+                return instances
+
             inputs = self._tokenizer(
                 instances,
                 max_length=self.max_length,
@@ -230,8 +244,12 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             # like NVIDIA triton inference server
             return await super().predict(input_batch, context)
         else:
-            input_batch = input_batch.to(self._device)
             try:
+                if self.task == MLTask.token_classification:
+                    with torch.no_grad():
+                        return self.nlp(input_batch)
+                
+                input_batch = input_batch.to(self._device)
                 with torch.no_grad():
                     if self.task == MLTask.text_embedding.value:
                         outputs = self._model(**input_batch)
@@ -285,11 +303,15 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
                 inferences.append(self._tokenizer.decode(predicted_token_id))
             return get_predict_response(request, inferences, self.name)
         elif self.task == MLTask.token_classification:
-            num_rows = outputs.shape[0]
+            num_rows = len(outputs)
             for i in range(num_rows):
-                output = outputs[i].unsqueeze(0)
-                predictions = torch.argmax(output, dim=2)
-                inferences.append(predictions.tolist())
+                output = outputs[i]
+                for entity in output:
+                    # without this, it fails with
+                    # ValueError: [TypeError("'numpy.float32' object is not iterable"), TypeError('vars() argument must have __dict__ attribute')]
+                    entity["score"] = float(entity["score"])
+                predictions = output
+                inferences.append(predictions)
             return get_predict_response(request, inferences, self.name)
         elif self.task == MLTask.text_embedding.value:
             # Perform pooling
