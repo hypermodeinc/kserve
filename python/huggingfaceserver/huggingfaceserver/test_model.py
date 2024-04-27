@@ -200,7 +200,25 @@ async def test_bert_sequence_classification(bert_base_yelp_polarity):
     response = await bert_base_yelp_polarity(
         {"instances": [request, request]}, headers={}
     )
-    assert response == {"predictions": [1, 1]}
+    assert response == {"predictions": [
+            {
+                'confidence': 0.9988189339637756,
+                'label': 1,
+                'probabilities': [
+                    {'label': 0, 'probability': 0.0011810670839622617},
+                    {'label': 1, 'probability': 0.9988189339637756}
+                ]
+            },
+            {
+                'confidence': 0.9988189339637756,
+                'label': 1,
+                'probabilities': [
+                    {'label': 0, 'probability': 0.0011810670839622617},
+                    {'label': 1, 'probability': 0.9988189339637756}
+                ]
+            }
+        ]
+    }
 
 
 @pytest.mark.asyncio
@@ -311,7 +329,25 @@ async def test_input_padding(bert_base_yelp_polarity: HuggingfaceEncoderModel):
     response = await bert_base_yelp_polarity(
         {"instances": [request_one, request_two]}, headers={}
     )
-    assert response == {"predictions": [1, 1]}
+    assert response == {"predictions": [
+            {
+                'confidence': 0.9988189339637756,
+                'label': 1,
+                'probabilities': [
+                    {'label': 0, 'probability': 0.0011810670839622617},
+                    {'label': 1, 'probability': 0.9988189339637756}
+                ]
+            },
+            {
+                'confidence': 0.9963782429695129,
+                'label': 1,
+                'probabilities': [
+                    {'label': 0, 'probability': 0.003621795680373907},
+                    {'label': 1, 'probability': 0.9963782429695129}
+                ]
+            }
+        ]
+    }
 
 
 @pytest.mark.asyncio
@@ -321,4 +357,4 @@ async def test_input_truncation(bert_base_yelp_polarity: HuggingfaceEncoderModel
     # unless we set truncation=True in the tokenizer
     request = "good " * 600
     response = await bert_base_yelp_polarity({"instances": [request]}, headers={})
-    assert response == {"predictions": [1]}
+    assert response == {'predictions': [{'confidence': 0.9914830327033997, 'label': 1, 'probabilities': [{'label': 0, 'probability': 0.00851691048592329}, {'label': 1, 'probability': 0.9914830327033997}]}]}

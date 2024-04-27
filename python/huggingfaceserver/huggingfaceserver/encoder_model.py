@@ -79,6 +79,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
         tokenizer_revision: Optional[str] = None,
         trust_remote_code: bool = False,
         predictor_config: Optional[PredictorConfig] = None,
+        classification_labels: Optional[Dict[int, str]] = None,
     ):
         super().__init__(model_name, predictor_config)
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -91,6 +92,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
         self.model_revision = model_revision
         self.tokenizer_revision = tokenizer_revision
         self.trust_remote_code = trust_remote_code
+        self.classification_labels = classification_labels
 
         if model_config:
             self.model_config = model_config
@@ -246,11 +248,28 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             input_ids = torch.Tensor(input_ids)
         inferences = []
         if self.task == MLTask.sequence_classification:
-            num_rows, num_cols = outputs.shape
+            outputs = torch.nn.functional.softmax(outputs, dim = -1).detach()
+            max_indices = torch.argmax(outputs, dim=1).tolist()
+            final = outputs.tolist()
+
+            id2label = {0: 0, 1: 1}
+            if self.classification_labels:
+                id2label = {i: val for i, val in enumerate(self.classification_labels)}
+
+            num_rows, _ = outputs.shape
             for i in range(num_rows):
-                out = outputs[i].unsqueeze(0)
-                predicted_idx = out.argmax().item()
-                inferences.append(predicted_idx)
+                max_id = max_indices[i]
+                res = {
+                    "label": id2label[max_id],
+                    "confidence": final[i][max_id],
+                    "probabilities": [
+                        {
+                            "label": id2label[j],
+                            "probability": final[i][j]
+                        } for j in range(len(final[i]))
+                    ]
+                }
+                inferences.append(res)
             return get_predict_response(request, inferences, self.name)
         elif self.task == MLTask.fill_mask:
             num_rows = outputs.shape[0]
