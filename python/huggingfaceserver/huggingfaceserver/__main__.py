@@ -276,6 +276,7 @@ def load_model():
                 predictor_config=predictor_config,
                 request_logger=request_logger,
                 return_probabilities=kwargs.get("return_probabilities", False),
+                classification_labels=kwargs.get("classification_labels", None)
             )
     model.load()
     return model

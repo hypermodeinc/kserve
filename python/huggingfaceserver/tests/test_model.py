@@ -150,6 +150,17 @@ def text_embedding():
     yield model
     model.stop()
 
+@pytest.fixture(scope="module")
+def text_embedding():
+    model = HuggingfaceEncoderModel(
+        "mxbai-embed-large-v1",
+        model_id_or_path="mixedbread-ai/mxbai-embed-large-v1",
+        task=MLTask.text_embedding,
+    )
+    model.load()
+    yield model
+    model.stop()
+
 
 def test_unsupported_model():
     config = AutoConfig.from_pretrained("google/tapas-base-finetuned-wtq")
@@ -278,7 +289,25 @@ async def test_bert_sequence_classification(bert_base_yelp_polarity):
     response, _ = await bert_base_yelp_polarity(
         {"instances": [request, request]}, headers={}
     )
-    assert response == {"predictions": [1, 1]}
+    assert response == {"predictions": [
+            {
+                'confidence': 0.9988189339637756,
+                'label': 1,
+                'probabilities': [
+                    {'label': 0, 'probability': 0.0011810670839622617},
+                    {'label': 1, 'probability': 0.9988189339637756}
+                ]
+            },
+            {
+                'confidence': 0.9988189339637756,
+                'label': 1,
+                'probabilities': [
+                    {'label': 0, 'probability': 0.0011810670839622617},
+                    {'label': 1, 'probability': 0.9988189339637756}
+                ]
+            }
+        ]
+    }
 
 
 @pytest.mark.asyncio
@@ -315,12 +344,48 @@ async def test_bert_token_classification(bert_token_classification):
         {"instances": [request, request]}, headers={}
     )
     assert response == {
-        "predictions": [
-            [[0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            [[0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+        'predictions': [
+            [
+                {'entity': 'I-ORG', 'score': 0.9972999691963196, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2},
+                {'entity': 'I-ORG', 'score': 0.9716504216194153, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7},
+                {'entity': 'I-ORG', 'score': 0.9962745904922485, 'index': 3, 'word': '##F', 'start': 7, 'end': 8},
+                {'entity': 'I-ORG', 'score': 0.993005096912384, 'index': 4, 'word': '##ace', 'start': 8, 'end': 11},
+                {'entity': 'I-LOC', 'score': 0.9940695762634277, 'index': 10, 'word': 'Paris', 'start': 34, 'end': 39},
+                {'entity': 'I-LOC', 'score': 0.9982321858406067, 'index': 12, 'word': 'New', 'start': 44, 'end': 47},
+                {'entity': 'I-LOC', 'score': 0.9975290894508362, 'index': 13, 'word': 'York', 'start': 48, 'end': 52}
+            ], 
+            [
+                {'entity': 'I-ORG', 'score': 0.9972999691963196, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2},
+                {'entity': 'I-ORG', 'score': 0.9716504216194153, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7},
+                {'entity': 'I-ORG', 'score': 0.9962745904922485, 'index': 3, 'word': '##F', 'start': 7, 'end': 8},
+                {'entity': 'I-ORG', 'score': 0.993005096912384, 'index': 4, 'word': '##ace', 'start': 8, 'end': 11},
+                {'entity': 'I-LOC', 'score': 0.9940695762634277, 'index': 10, 'word': 'Paris', 'start': 34, 'end': 39},
+                {'entity': 'I-LOC', 'score': 0.9982321858406067, 'index': 12, 'word': 'New', 'start': 44, 'end': 47},
+                {'entity': 'I-LOC', 'score': 0.9975290894508362, 'index': 13, 'word': 'York', 'start': 48, 'end': 52}]
         ]
     }
 
+@pytest.mark.asyncio
+async def test_text_embedding(text_embedding):
+    def cosine_similarity(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+        if len(a.shape) == 1:
+            a = a.unsqueeze(0)
+
+        if len(b.shape) == 1:
+            b = b.unsqueeze(0)
+
+        a_norm = F.normalize(a, p=2, dim=1)
+        b_norm = F.normalize(b, p=2, dim=1)
+        return torch.mm(a_norm, b_norm.transpose(0, 1))
+
+    requests = ["I'm happy", "I'm full of happiness", "They were born in the capital city of France, Paris"]
+    response = await text_embedding({"instances": requests}, headers={})
+    predictions = response["predictions"]
+
+    print(cosine_similarity(torch.tensor(predictions[0]), torch.tensor(predictions[1]))[0])
+    print(cosine_similarity(torch.tensor(predictions[0]), torch.tensor(predictions[2]))[0])
+    assert cosine_similarity(torch.tensor(predictions[0]), torch.tensor(predictions[1]))[0] > 0.9
+    assert cosine_similarity(torch.tensor(predictions[0]), torch.tensor(predictions[2]))[0] < 0.6
 
 @pytest.mark.asyncio
 async def test_bloom_completion(bloom_model: HuggingfaceGenerativeModel):
@@ -501,7 +566,25 @@ async def test_input_padding(bert_base_yelp_polarity: HuggingfaceEncoderModel):
     response, _ = await bert_base_yelp_polarity(
         {"instances": [request_one, request_two]}, headers={}
     )
-    assert response == {"predictions": [1, 1]}
+    assert response == {"predictions": [
+            {
+                'confidence': 0.9988189339637756,
+                'label': 1,
+                'probabilities': [
+                    {'label': 0, 'probability': 0.0011810670839622617},
+                    {'label': 1, 'probability': 0.9988189339637756}
+                ]
+            },
+            {
+                'confidence': 0.9963782429695129,
+                'label': 1,
+                'probabilities': [
+                    {'label': 0, 'probability': 0.003621795680373907},
+                    {'label': 1, 'probability': 0.9963782429695129}
+                ]
+            }
+        ]
+    }
 
 
 @pytest.mark.asyncio
@@ -511,7 +594,7 @@ async def test_input_truncation(bert_base_yelp_polarity: HuggingfaceEncoderModel
     # unless we set truncation=True in the tokenizer
     request = "good " * 600
     response, _ = await bert_base_yelp_polarity({"instances": [request]}, headers={})
-    assert response == {"predictions": [1]}
+    assert response == {'predictions': [{'confidence': 0.9914830327033997, 'label': 1, 'probabilities': [{'label': 0, 'probability': 0.00851691048592329}, {'label': 1, 'probability': 0.9914830327033997}]}]}
 
 
 @pytest.mark.asyncio
