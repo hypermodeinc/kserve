@@ -1,3 +1,5 @@
+IMG ?= hypermode/huggingface-model-server:latest
+
 dev_install:
 	poetry install --with test
 
@@ -9,3 +11,6 @@ test: type_check
 
 type_check:
 	mypy --ignore-missing-imports huggingfaceserver 
+
+build-docker:
+	docker build --platform linux/amd64 -t $(IMG) -f ../huggingface_server.Dockerfile ..
