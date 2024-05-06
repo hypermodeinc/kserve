@@ -275,7 +275,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             max_indices = torch.argmax(outputs, dim=1).tolist()
             final = outputs.tolist()
 
-            id2label = {0: 0, 1: 1}
+            id2label = self.model_config.id2label
             if self.classification_labels:
                 id2label = {i: val for i, val in enumerate(self.classification_labels)}
 
