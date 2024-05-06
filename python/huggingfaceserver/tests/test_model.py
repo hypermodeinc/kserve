@@ -110,6 +110,16 @@ def bert_token_classification_return_prob():
     yield model
     model.stop()
 
+@pytest.fixture(scope="module")
+def distilbert_base_uncased_finetuned_sst_2_english():
+    model = HuggingfaceEncoderModel(
+        "distilbert-base-uncased-finetuned-sst-2-english",
+        model_id_or_path="distilbert/distilbert-base-uncased-finetuned-sst-2-english",
+        do_lower_case=True,
+    )
+    model.load()
+    yield model
+    model.stop()
 
 @pytest.fixture(scope="module")
 def bert_token_classification():
@@ -292,22 +302,32 @@ async def test_bert_sequence_classification(bert_base_yelp_polarity):
     assert response == {"predictions": [
             {
                 'confidence': 0.9988189339637756,
-                'label': 1,
+                'label': "LABEL_1",
                 'probabilities': [
-                    {'label': 0, 'probability': 0.0011810670839622617},
-                    {'label': 1, 'probability': 0.9988189339637756}
+                    {'label': "LABEL_0", 'probability': 0.0011810670839622617},
+                    {'label': "LABEL_1", 'probability': 0.9988189339637756}
                 ]
             },
             {
                 'confidence': 0.9988189339637756,
-                'label': 1,
+                'label': "LABEL_1",
                 'probabilities': [
-                    {'label': 0, 'probability': 0.0011810670839622617},
-                    {'label': 1, 'probability': 0.9988189339637756}
+                    {'label': "LABEL_0", 'probability': 0.0011810670839622617},
+                    {'label': "LABEL_1", 'probability': 0.9988189339637756}
                 ]
             }
         ]
     }
+
+@pytest.mark.asyncio
+async def test_infer_labels_from_config(distilbert_base_uncased_finetuned_sst_2_english):
+    request = "Hello, my dog is cute."
+    response = await distilbert_base_uncased_finetuned_sst_2_english(
+        {"instances": [request, request]}, headers={}
+    )
+    # verify that the label(s) are inferred from the model config:
+    # https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english/blob/main/config.json
+    assert response["predictions"][0]["label"] == "POSITIVE"
 
 
 @pytest.mark.asyncio
@@ -559,21 +579,22 @@ async def test_input_padding(bert_base_yelp_polarity: HuggingfaceEncoderModel):
     response = await bert_base_yelp_polarity(
         {"instances": [request_one, request_two]}, headers={}
     )
-    assert response == {"predictions": [
+    assert response == {
+        "predictions": [
             {
                 'confidence': 0.9988189339637756,
-                'label': 1,
+                'label': "LABEL_1",
                 'probabilities': [
-                    {'label': 0, 'probability': 0.0011810670839622617},
-                    {'label': 1, 'probability': 0.9988189339637756}
+                    {'label': "LABEL_0", 'probability': 0.0011810670839622617},
+                    {'label': "LABEL_1", 'probability': 0.9988189339637756}
                 ]
             },
             {
                 'confidence': 0.9963782429695129,
-                'label': 1,
+                'label': "LABEL_1",
                 'probabilities': [
-                    {'label': 0, 'probability': 0.003621795680373907},
-                    {'label': 1, 'probability': 0.9963782429695129}
+                    {'label': "LABEL_0", 'probability': 0.003621795680373907},
+                    {'label': "LABEL_1", 'probability': 0.9963782429695129}
                 ]
             }
         ]
@@ -587,7 +608,18 @@ async def test_input_truncation(bert_base_yelp_polarity: HuggingfaceEncoderModel
     # unless we set truncation=True in the tokenizer
     request = "good " * 600
     response = await bert_base_yelp_polarity({"instances": [request]}, headers={})
-    assert response == {'predictions': [{'confidence': 0.9914830327033997, 'label': 1, 'probabilities': [{'label': 0, 'probability': 0.00851691048592329}, {'label': 1, 'probability': 0.9914830327033997}]}]}
+    assert response == {
+        "predictions": [
+            {
+                'confidence': 0.9914830327033997, 
+                'label': "LABEL_1", 
+                'probabilities': [
+                    {'label': "LABEL_0", 'probability': 0.00851691048592329}, 
+                    {'label': "LABEL_1", 'probability': 0.9914830327033997}
+                ]
+            }
+        ]
+    }
 
 
 @pytest.mark.asyncio
