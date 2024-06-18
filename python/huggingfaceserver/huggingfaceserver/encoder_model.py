@@ -297,10 +297,6 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             input_ids = torch.Tensor(input_ids)
         inferences = []
         if self.task == MLTask.sequence_classification:
-            outputs = torch.nn.functional.softmax(outputs, dim = -1).detach()
-            max_indices = torch.argmax(outputs, dim=1).tolist()
-            final = outputs.tolist()
-
             id2label = self.model_config.id2label
             if self.classification_labels:
                 id2label = {i: val for i, val in enumerate(self.classification_labels)}
@@ -311,15 +307,16 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
                 if self.return_probabilities:
                     inferences.append(dict(enumerate(out.numpy().flatten())))
                 else:
-                    max_id = max_indices[i]
+                    predicted_idx = out.argmax().item()
+                    confidence = torch.nn.functional.softmax(out, dim = -1).detach().tolist()[0]
                     res = {
-                        "label": id2label[max_id],
-                        "confidence": final[i][max_id],
+                        "label": id2label[predicted_idx],
+                        "confidence": confidence[predicted_idx],
                         "probabilities": [
                             {
                                 "label": id2label[j],
-                                "probability": final[i][j]
-                            } for j in range(len(final[i]))
+                                "probability": confidence[j]
+                            } for j in range(len(confidence))
                         ]
                     }
                     inferences.append(res)
@@ -346,14 +343,13 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
         elif self.task == MLTask.token_classification:
             num_rows = len(outputs)
             for i in range(num_rows):
-                output = outputs[i].unsqueeze(0)
-                if self.return_probabilities:
-                    for values in output.tolist():
-                        res = [{k: v for k, v in enumerate(value)} for value in values]
-                        inferences.append([res])
-                else:
-                    predictions = torch.argmax(output, dim=2)
-                    inferences.append(predictions.tolist())
+                output = outputs[i]
+                for entity in output:
+                    # without this, it fails with
+                    # ValueError: [TypeError("'numpy.float32' object is not iterable"), TypeError('vars() argument must have __dict__ attribute')]
+                    entity["score"] = float(entity["score"])
+                predictions = output
+                inferences.append(predictions)
             return get_predict_response(request, inferences, self.name)
         elif self.task == MLTask.text_embedding:
             # Perform pooling
