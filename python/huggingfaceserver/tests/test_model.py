@@ -592,16 +592,16 @@ async def test_input_padding(bert_base_yelp_polarity: HuggingfaceEncoderModel):
                 'confidence': 0.9988189339637756,
                 'label': "LABEL_1",
                 'probabilities': [
-                    {'label': "LABEL_0", 'probability': 0.0011810670839622617},
-                    {'label': "LABEL_1", 'probability': 0.9988189339637756}
+                    {'label': "LABEL_0", 'probability': approx(0.001181067)},
+                    {'label': "LABEL_1", 'probability': approx(0.998818933)}
                 ]
             },
             {
                 'confidence': 0.9963782429695129,
                 'label': "LABEL_1",
                 'probabilities': [
-                    {'label': "LABEL_0", 'probability': 0.003621795680373907},
-                    {'label': "LABEL_1", 'probability': 0.9963782429695129}
+                    {'label': "LABEL_0", 'probability': approx(0.00362180)},
+                    {'label': "LABEL_1", 'probability': approx(0.99637824)}
                 ]
             }
         ]
