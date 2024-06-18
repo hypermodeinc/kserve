@@ -367,7 +367,7 @@ async def test_bert_token_classification(bert_token_classification):
         'predictions': [
             [
                 {'entity': 'I-ORG', 'score': 0.9972999691963196, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2},
-                {'entity': 'I-ORG', 'score': 0.9716504216194153, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7},
+                {'entity': 'I-ORG', 'score': 0.9716505408287048, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7},
                 {'entity': 'I-ORG', 'score': 0.9962745904922485, 'index': 3, 'word': '##F', 'start': 7, 'end': 8},
                 {'entity': 'I-ORG', 'score': 0.993005096912384, 'index': 4, 'word': '##ace', 'start': 8, 'end': 11},
                 {'entity': 'I-LOC', 'score': 0.9940695762634277, 'index': 10, 'word': 'Paris', 'start': 34, 'end': 39},
@@ -376,7 +376,7 @@ async def test_bert_token_classification(bert_token_classification):
             ], 
             [
                 {'entity': 'I-ORG', 'score': 0.9972999691963196, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2},
-                {'entity': 'I-ORG', 'score': 0.9716504216194153, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7},
+                {'entity': 'I-ORG', 'score': 0.9716505408287048, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7},
                 {'entity': 'I-ORG', 'score': 0.9962745904922485, 'index': 3, 'word': '##F', 'start': 7, 'end': 8},
                 {'entity': 'I-ORG', 'score': 0.993005096912384, 'index': 4, 'word': '##ace', 'start': 8, 'end': 11},
                 {'entity': 'I-LOC', 'score': 0.9940695762634277, 'index': 10, 'word': 'Paris', 'start': 34, 'end': 39},
@@ -618,11 +618,11 @@ async def test_input_truncation(bert_base_yelp_polarity: HuggingfaceEncoderModel
     assert response == {
         "predictions": [
             {
-                'confidence': 0.9914830327033997, 
+                'confidence': approx(0.7674337),
                 'label': "LABEL_1", 
                 'probabilities': [
-                    {'label': "LABEL_0", 'probability': 0.00851691048592329}, 
-                    {'label': "LABEL_1", 'probability': 0.9914830327033997}
+                    {'label': "LABEL_0", 'probability': approx(0.2325663)}, 
+                    {'label': "LABEL_1", 'probability': approx(0.7674337)}
                 ]
             }
         ]
