@@ -25,6 +25,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoModelForTableQuestionAnswering,
     AutoModelForTokenClassification,
+    AutoModelForVision2Seq,
     PretrainedConfig,
 )
 
@@ -43,6 +44,7 @@ class MLTask(str, Enum):
     text2text_generation = auto()
     multiple_choice = auto()
     text_embedding = auto()
+    image2text = auto()
 
     @classmethod
     def _missing_(cls, value: str):
@@ -54,6 +56,7 @@ class MLTask(str, Enum):
 
 
 ARCHITECTURES_2_TASK = {
+    "BlipForConditionalGeneration": MLTask.image2text,
     "TapasForQuestionAnswering": MLTask.table_question_answering,
     "ForQuestionAnswering": MLTask.question_answering,
     "ForTokenClassification": MLTask.token_classification,
@@ -76,6 +79,7 @@ TASK_2_CLS = {
     MLTask.text2text_generation: AutoModelForSeq2SeqLM,
     MLTask.multiple_choice: AutoModelForMultipleChoice,
     MLTask.text_embedding: AutoModel,
+    MLTask.image2text: AutoModelForVision2Seq,
 }
 
 SUPPORTED_TASKS = {
@@ -85,6 +89,7 @@ SUPPORTED_TASKS = {
     MLTask.text_generation,
     MLTask.text2text_generation,
     MLTask.text_embedding,
+    MLTask.image2text,
 }
 
 

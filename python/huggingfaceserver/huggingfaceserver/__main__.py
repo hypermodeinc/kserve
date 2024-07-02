@@ -35,6 +35,7 @@ from huggingfaceserver.task import (
 from . import (
     HuggingfaceGenerativeModel,
     HuggingfaceEncoderModel,
+    HuggingfaceVisionEncoderDecoderModel,
     Backend,
 )
 from .vllm.utils import (
@@ -209,6 +210,26 @@ def load_model():
                 max_length=kwargs["max_length"],
                 dtype=dtype,
                 trust_remote_code=kwargs["trust_remote_code"],
+            )
+        elif task == MLTask.image2text:
+            dtype = kwargs.get("dtype", default_dtype)
+            dtype = hf_dtype_map[dtype]
+            logger.debug(f"Loading model in {dtype}")
+
+            logger.info(f"Loading image-to-text model for task '{task.name}' in {dtype}")
+
+            model = HuggingfaceVisionEncoderDecoderModel(
+                model_name=args.model_name,
+                model_id_or_path=model_id_or_path,
+                task=task,
+                model_config=model_config,
+                model_revision=kwargs.get("model_revision", None),
+                tokenizer_revision=kwargs.get("tokenizer_revision", None),
+                add_special_tokens=not kwargs.get("disable_special_tokens", False),
+                dtype=dtype,
+                trust_remote_code=kwargs["trust_remote_code"],
+                tensor_input_names=kwargs.get("tensor_input_names", None),
+                return_token_type_ids=kwargs.get("return_token_type_ids", None),
             )
         else:
             # Convert dtype from string to torch dtype. Default to float32

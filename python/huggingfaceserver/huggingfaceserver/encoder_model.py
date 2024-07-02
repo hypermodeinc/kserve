@@ -141,9 +141,6 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
 
         if self._model._no_split_modules:
             device_map = "auto"
-        # somehow, setting it to True give worse results for NER task
-        if self.task == MLTask.token_classification.value:
-            self.do_lower_case = False
 
         tokenizer_kwargs = {}
         model_kwargs = {}

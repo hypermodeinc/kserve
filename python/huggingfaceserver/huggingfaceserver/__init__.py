@@ -15,6 +15,7 @@
 from enum import Enum, auto as auto_value
 from .encoder_model import HuggingfaceEncoderModel
 from .generative_model import HuggingfaceGenerativeModel
+from .vision_encoder_decoder_model import HuggingfaceVisionEncoderDecoderModel
 
 
 class Backend(str, Enum):
@@ -30,4 +31,5 @@ class Backend(str, Enum):
 __all__ = [
     "HuggingfaceGenerativeModel",
     "HuggingfaceEncoderModel",
+    "HuggingfaceVisionEncoderDecoderModel",
 ]
