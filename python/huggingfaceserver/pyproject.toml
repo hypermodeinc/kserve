@@ -12,11 +12,11 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
 kserve = { path = "../kserve", extras = ["storage"], develop = true }
-transformers = "~4.40.2"
-accelerate = "~0.30.0"
+transformers = "~4.43.3"
+accelerate = "~0.32.0"
 torch = "~2.3.0"
-vllm = { version = "^0.4.2", optional = true }
 pillow = "^10.3.0"
+vllm = { version = "^0.5.3.post1", optional = true }
 
 [tool.poetry.extras]
 vllm = [
@@ -30,7 +30,7 @@ optional = true
 pytest = "^7.2.0"
 pytest-cov = "^4.0.0"
 mypy = "^0.991"
-pytest-asyncio = "^0.20.3"
+pytest-asyncio = ">=0.23.4, <1.0.0"
 pytest_httpx = "^v0.28.0"
 
 [tool.poetry.group.dev]
