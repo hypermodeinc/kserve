@@ -31,7 +31,6 @@ from kserve.utils.utils import (
 from torch import Tensor
 from transformers import (
     AutoConfig,
-    AutoModel,
     AutoTokenizer,
     BatchEncoding,
     pipeline,
@@ -41,6 +40,7 @@ from transformers import (
     TensorType,
 )
 
+from .request_logger import RequestLogger
 from .task import (
     MLTask,
     is_generative_task,
@@ -85,6 +85,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
         return_probabilities: bool = False,
         predictor_config: Optional[PredictorConfig] = None,
         classification_labels: Optional[Dict[int, str]] = None,
+        request_logger: Optional[RequestLogger] = None,
     ):
         super().__init__(model_name, predictor_config)
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -101,6 +102,7 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
         self.return_probabilities = return_probabilities
         self.classification_labels = classification_labels
         self.nlp = None
+        self.request_logger = request_logger
 
         if model_config:
             self.model_config = model_config
@@ -130,12 +132,13 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
         model_id_or_path = self.model_id_or_path
 
         self.max_length = _get_and_verify_max_len(self.model_config, self.max_length)
+        model_cls = get_model_class_for_task(self.task)
 
         # device_map = "auto" enables model parallelism but all model architcture dont support it.
         # For pre-check we initialize the model class without weights to check the `_no_split_modules`
         # device_map = "auto" for models that support this else set to either cuda/cpu
         with init_empty_weights():
-            self._model = AutoModel.from_config(self.model_config)
+            self._model = model_cls.from_config(self.model_config)
 
         device_map = self._device
 
@@ -165,7 +168,6 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
 
         # load huggingface model using from_pretrained for inference mode
         if not self.predictor_host:
-            model_cls = get_model_class_for_task(self.task)
             self._model = model_cls.from_pretrained(
                 model_id_or_path,
                 revision=self.model_revision,
@@ -198,6 +200,11 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
         context: Dict[str, Any],
     ) -> Union[BatchEncoding, InferRequest]:
         instances = get_predict_input(payload)
+        if isinstance(payload, InferRequest):
+            request_id = payload.id
+        else:
+            request_id = "N.A."
+        self._log_request(request_id, instances)
         # Serialize to tensor
         if self.predictor_host:
             inputs = self._tokenizer(
@@ -356,6 +363,13 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
         else:
             raise ValueError(
                 f"Unsupported task {self.task}. Please check the supported `task` option."
+            )
+
+    def _log_request(self, request_id: str, prompt: list[str]) -> None:
+        if self.request_logger:
+            self.request_logger.log_inputs(
+                request_id,
+                prompt=prompt,
             )
 
 # Mean Pooling - Take attention mask into account for correct averaging

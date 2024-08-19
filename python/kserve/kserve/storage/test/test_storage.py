@@ -65,6 +65,18 @@ def test_no_prefix_local_path():
     assert Storage.download(relative_path) == relative_path
 
 
+def test_local_path_with_out_dir_exist():
+    abs_path = "file:///tmp"
+    out_dir = "/tmp"
+    assert Storage.download(abs_path, out_dir=out_dir) == out_dir
+
+
+def test_local_path_with_out_dir_not_exist():
+    abs_path = "file:///tmp"
+    out_dir = "/tmp/test-abc"
+    assert Storage.download(abs_path, out_dir=out_dir) == out_dir
+
+
 class MockHttpResponse(object):
     def __init__(self, status_code=404, raw=b"", content_type=""):
         self.status_code = status_code
@@ -291,3 +303,33 @@ def test_unpack_zip_file():
     Storage._unpack_archive_file(tar_file, mimetype, out_dir)
     assert os.path.exists(os.path.join(out_dir, "model.pth"))
     os.remove(os.path.join(out_dir, "model.pth"))
+
+
+@mock.patch(STORAGE_MODULE + ".Storage._download_azure_blob")
+def test_download_azure_blob_called_with_matching_uri(mock_download_azure_blob):
+    azure_blob_uris = [
+        "https://accountname.blob.core.windows.net/container/some/blob/",
+        "https://accountname.z20.blob.storage.azure.net/container/some/blob/",
+    ]
+
+    for uri in azure_blob_uris:
+        Storage.download(uri, out_dir="dest_path")
+
+    expected_calls = [mock.call(uri, "dest_path") for uri in azure_blob_uris]
+    mock_download_azure_blob.assert_has_calls(expected_calls)
+
+
+@mock.patch(STORAGE_MODULE + ".Storage._download_azure_file_share")
+def test_download_azure_file_share_called_with_matching_uri(
+    mock_download_azure_file_share,
+):
+    azure_file_uris = [
+        "https://accountname.file.core.windows.net/container/some/blob",
+        "https://accountname.z20.file.storage.azure.net/container/some/blob",
+    ]
+
+    for uri in azure_file_uris:
+        Storage.download(uri, out_dir="dest_path")
+
+    expected_calls = [mock.call(uri, "dest_path") for uri in azure_file_uris]
+    mock_download_azure_file_share.assert_has_calls(expected_calls)

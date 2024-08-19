@@ -18,6 +18,7 @@ from typing import cast
 
 import torch
 import kserve
+from huggingfaceserver.request_logger import RequestLogger
 from kserve import logging
 from kserve.logging import logger
 from kserve.model import PredictorConfig
@@ -113,7 +114,18 @@ parser.add_argument(
     action="store_true",
     help="Return all probabilities",
 )
-
+parser.add_argument(
+    "--disable_log_requests", action="store_true", help="Disable logging requests"
+)
+parser.add_argument(
+    "--max_log_len",
+    "--max-log-len",
+    type=int,
+    default=None,
+    help="Max number of prompt characters or prompt "
+    "ID numbers being printed in log."
+    "\n\nDefault: Unlimited",
+)
 parser = maybe_add_vllm_cli_parser(parser)
 
 default_dtype = "float16" if torch.cuda.is_available() else "float32"
@@ -124,7 +136,8 @@ if not vllm_available():
         required=False,
         default="auto",
         choices=dtype_choices,
-        help=f"data type to load the weights in. One of {dtype_choices}. Defaults to float16 for GPU and float32 for CPU systems",
+        help=f"data type to load the weights in. One of {dtype_choices}. "
+        f"Defaults to float16 for GPU and float32 for CPU systems",
     )
 
 args, _ = parser.parse_known_args()
@@ -145,6 +158,11 @@ def load_model():
     else:
         model_id_or_path = Path(Storage.download(args.model_dir))
 
+    if args.disable_log_requests:
+        request_logger = None
+    else:
+        request_logger = RequestLogger(max_log_len=args.max_log_len)
+
     if model_id_or_path is None:
         raise ValueError("You must provide a model_id or model_dir")
 
@@ -154,14 +172,17 @@ def load_model():
     if (
         (args.backend == Backend.vllm or args.backend == Backend.auto)
         and vllm_available()
-        and infer_vllm_supported_from_model_architecture(model_id_or_path)
+        and infer_vllm_supported_from_model_architecture(
+            model_id_or_path,
+            trust_remote_code=args.trust_remote_code,
+        )
     ):
         from .vllm.vllm_model import VLLMModel
 
         args.model = args.model_id or args.model_dir
         args.revision = args.model_revision
         engine_args = build_vllm_engine_args(args)
-        model = VLLMModel(args.model_name, engine_args)
+        model = VLLMModel(args.model_name, engine_args, request_logger=request_logger)
 
     else:
         kwargs = vars(args)
@@ -174,7 +195,9 @@ def load_model():
         }
 
         model_config = AutoConfig.from_pretrained(
-            str(model_id_or_path), revision=kwargs.get("model_revision", None)
+            str(model_id_or_path),
+            revision=kwargs.get("model_revision", None),
+            trust_remote_code=kwargs.get("trust_remote_code", False),
         )
         if kwargs.get("task", None):
             try:
@@ -209,6 +232,7 @@ def load_model():
                 max_length=kwargs["max_length"],
                 dtype=dtype,
                 trust_remote_code=kwargs["trust_remote_code"],
+                request_logger=request_logger,
             )
         else:
             # Convert dtype from string to torch dtype. Default to float32
@@ -238,6 +262,7 @@ def load_model():
                 return_token_type_ids=kwargs.get("return_token_type_ids", None),
                 predictor_config=predictor_config,
                 classification_labels=kwargs.get("classification_labels", None)
+                request_logger=request_logger,
             )
     model.load()
     return model
@@ -248,7 +273,7 @@ if __name__ == "__main__":
         logging.configure_logging(args.log_config_file)
     try:
         model = load_model()
-        kserve.ModelServer().start([model] if model.ready else [])
+        kserve.ModelServer().start([model])
     except Exception as e:
         import sys
 
