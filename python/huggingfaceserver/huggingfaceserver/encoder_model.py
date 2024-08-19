@@ -144,9 +144,6 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
 
         if self._model._no_split_modules:
             device_map = "auto"
-        # somehow, setting it to True give worse results for NER task
-        if self.task == MLTask.token_classification.value:
-            self.do_lower_case = False
 
         tokenizer_kwargs = {}
         model_kwargs = {}
@@ -186,8 +183,6 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
                 # When adding new tokens to the vocabulary, we should make sure to also resize the token embedding
                 # matrix of the model so that its embedding matrix matches the tokenizer.
                 self._model.resize_token_embeddings(len(self._tokenizer))
-            if self.task == MLTask.token_classification:
-                self.nlp = pipeline("ner", model=self._model, tokenizer=self._tokenizer)
             logger.info(
                 f"Successfully loaded huggingface model from path {model_id_or_path}"
             )
@@ -236,12 +231,6 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             )
             return infer_request
         else:
-            if self.task == MLTask.token_classification.value:
-                context["payload"] = payload
-                context["inputs"] = instances
-                context["input_ids"] = []
-                return instances
-
             inputs = self._tokenizer(
                 instances,
                 max_length=self.max_length,
@@ -268,15 +257,11 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
             # like NVIDIA triton inference server
             return await super().predict(input_batch, context)
         else:
+            input_batch = input_batch.to(self._device)
             try:
-                if self.task == MLTask.token_classification:
-                    with torch.no_grad():
-                        return self.nlp(input_batch)
-                
-                input_batch = input_batch.to(self._device)
                 with torch.no_grad():
                     outputs = self._model(**input_batch)
-                    if self.task == MLTask.text_embedding.value:
+                    if self.task == MLTask.text_embedding:
                         # last_hidden_state contains all token embeddings
                         outputs = outputs.last_hidden_state
                     else:
@@ -341,15 +326,16 @@ class HuggingfaceEncoderModel(Model):  # pylint:disable=c-extension-no-member
                     inferences.append(self._tokenizer.decode(predicted_token_id))
             return get_predict_response(request, inferences, self.name)
         elif self.task == MLTask.token_classification:
-            num_rows = len(outputs)
+            num_rows = outputs.shape[0]
             for i in range(num_rows):
-                output = outputs[i]
-                for entity in output:
-                    # without this, it fails with
-                    # ValueError: [TypeError("'numpy.float32' object is not iterable"), TypeError('vars() argument must have __dict__ attribute')]
-                    entity["score"] = float(entity["score"])
-                predictions = output
-                inferences.append(predictions)
+                output = outputs[i].unsqueeze(0)
+                if self.return_probabilities:
+                    for values in output.tolist():
+                        res = [{k: v for k, v in enumerate(value)} for value in values]
+                        inferences.append([res])
+                else:
+                    predictions = torch.argmax(output, dim=2)
+                    inferences.append(predictions.tolist())
             return get_predict_response(request, inferences, self.name)
         elif self.task == MLTask.text_embedding:
             # Perform pooling

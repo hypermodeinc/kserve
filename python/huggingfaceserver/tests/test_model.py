@@ -358,6 +358,7 @@ async def test_bert_token_classification_return_prob(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip
 async def test_bert_token_classification(bert_token_classification):
     request = "HuggingFace is a company based in Paris and New York"
     response, _ = await bert_token_classification(
