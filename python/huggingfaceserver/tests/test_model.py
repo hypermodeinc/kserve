@@ -322,7 +322,7 @@ async def test_bert_sequence_classification(bert_base_yelp_polarity):
 @pytest.mark.asyncio
 async def test_infer_labels_from_config(distilbert_base_uncased_finetuned_sst_2_english):
     request = "Hello, my dog is cute."
-    response = await distilbert_base_uncased_finetuned_sst_2_english(
+    response, _ = await distilbert_base_uncased_finetuned_sst_2_english(
         {"instances": [request, request]}, headers={}
     )
     # verify that the label(s) are inferred from the model config:
