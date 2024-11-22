@@ -221,7 +221,7 @@ async def test_t5_bad_params(t5_model: HuggingfaceGenerativeModel):
 
 @pytest.mark.asyncio
 async def test_bert(bert_base_model: HuggingfaceEncoderModel):
-    response = await bert_base_model(
+    response, _ = await bert_base_model(
         {
             "instances": [
                 "The capital of France is [MASK].",
@@ -247,7 +247,7 @@ async def test_model_revision(request: HuggingfaceEncoderModel):
     model.load()
     request.addfinalizer(model.stop)
 
-    response = await model(
+    response, _ = await model(
         {
             "instances": [
                 "The capital of France is [MASK].",
@@ -287,7 +287,7 @@ async def test_bert_predictor_host(request, httpx_mock: HTTPXMock):
     model.load()
     request.addfinalizer(model.stop)
 
-    response = await model(
+    response, _ = await model(
         {"instances": ["The capital of France is [MASK]."]}, headers={}
     )
     assert response == {"predictions": ["[PAD]"]}
@@ -296,7 +296,7 @@ async def test_bert_predictor_host(request, httpx_mock: HTTPXMock):
 @pytest.mark.asyncio
 async def test_bert_sequence_classification(bert_base_yelp_polarity):
     request = "Hello, my dog is cute."
-    response = await bert_base_yelp_polarity(
+    response, _ = await bert_base_yelp_polarity(
         {"instances": [request, request]}, headers={}
     )
     assert response == {"predictions": [
@@ -322,7 +322,7 @@ async def test_bert_sequence_classification(bert_base_yelp_polarity):
 @pytest.mark.asyncio
 async def test_infer_labels_from_config(distilbert_base_uncased_finetuned_sst_2_english):
     request = "Hello, my dog is cute."
-    response = await distilbert_base_uncased_finetuned_sst_2_english(
+    response, _ = await distilbert_base_uncased_finetuned_sst_2_english(
         {"instances": [request, request]}, headers={}
     )
     # verify that the label(s) are inferred from the model config:
@@ -333,7 +333,7 @@ async def test_infer_labels_from_config(distilbert_base_uncased_finetuned_sst_2_
 @pytest.mark.asyncio
 async def test_bert_sequence_classification_return_probabilities(bert_base_return_prob):
     request = "Hello, my dog is cute."
-    response = await bert_base_return_prob(
+    response, _ = await bert_base_return_prob(
         {"instances": [request, request]}, headers={}
     )
 
@@ -350,7 +350,8 @@ async def test_bert_token_classification_return_prob(
     bert_token_classification_return_prob,
 ):
     request = "Hello, my dog is cute."
-    response = await bert_token_classification_return_prob(
+
+    response, _ = await bert_token_classification_return_prob(
         {"instances": [request, request]}, headers={}
     )
     assert response == bert_token_classification_return_prob_expected_output
@@ -360,7 +361,7 @@ async def test_bert_token_classification_return_prob(
 @pytest.mark.skip
 async def test_bert_token_classification(bert_token_classification):
     request = "HuggingFace is a company based in Paris and New York"
-    response = await bert_token_classification(
+    response, _ = await bert_token_classification(
         {"instances": [request, request]}, headers={}
     )
     assert response == {
@@ -474,6 +475,9 @@ async def test_bloom_chat_completion(bloom_model: HuggingfaceGenerativeModel):
         messages=messages,
         stream=False,
         max_tokens=20,
+        chat_template="{% for message in messages %}"
+        "{{ message.content }}{{ eos_token }}"
+        "{% endfor %}",
     )
     request = ChatCompletionRequest(params=params, context={})
     response = await bloom_model.create_chat_completion(request)
@@ -501,6 +505,9 @@ async def test_bloom_chat_completion_streaming(bloom_model: HuggingfaceGenerativ
         messages=messages,
         stream=True,
         max_tokens=20,
+        chat_template="{% for message in messages %}"
+        "{{ message.content }}{{ eos_token }}"
+        "{% endfor %}",
     )
     request = ChatCompletionRequest(params=params, context={})
     response = await bloom_model.create_chat_completion(request)
@@ -556,7 +563,7 @@ async def test_text_embedding(text_embedding):
         return torch.mm(a_norm, b_norm.transpose(0, 1))
 
     requests = ["I'm happy", "I'm full of happiness", "They were at the park."]
-    response = await text_embedding({"instances": requests}, headers={})
+    response, _ = await text_embedding({"instances": requests}, headers={})
     predictions = response["predictions"]
 
     # The first two requests are semantically similar, so the cosine similarity should be high
@@ -577,7 +584,7 @@ async def test_input_padding(bert_base_yelp_polarity: HuggingfaceEncoderModel):
     # unless we set padding=True in the tokenizer
     request_one = "Hello, my dog is cute."
     request_two = "Hello there, my dog is cute."
-    response = await bert_base_yelp_polarity(
+    response, _ = await bert_base_yelp_polarity(
         {"instances": [request_one, request_two]}, headers={}
     )
     assert response == {
@@ -608,7 +615,7 @@ async def test_input_truncation(bert_base_yelp_polarity: HuggingfaceEncoderModel
     # this request exceeds that, so it will throw an error
     # unless we set truncation=True in the tokenizer
     request = "good " * 600
-    response = await bert_base_yelp_polarity({"instances": [request]}, headers={})
+    response, _ = await bert_base_yelp_polarity({"instances": [request]}, headers={})
     assert response == {
         "predictions": [
             {
@@ -642,6 +649,60 @@ async def test_input_padding_with_pad_token_not_specified(
     response = await openai_gpt_model.create_completion(request)
     assert (
         response.choices[0].text
-        == "west, and the sun sets in the west. \n the sun rises in the"
+        == "west , and the sun sets in the west . \n the sun rises in the"
     )
-    assert "a member of the royal family." in response.choices[1].text
+    assert "a member of the royal family ." in response.choices[1].text
+
+
+@pytest.mark.asyncio
+async def test_tools_chat_completion(bloom_model: HuggingfaceGenerativeModel):
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a friendly chatbot whose purpose is to tell me what the weather is.",
+        },
+        {
+            "role": "user",
+            "content": "weather in Ithaca, NY",
+        },
+    ]
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_current_weather",
+                "description": "Get the current weather",
+                "parameters": {
+                    "type": "dict",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The city and state, e.g. San Francisco, CA",
+                        },
+                        "format": {
+                            "type": "string",
+                            "enum": ["celsius", "fahrenheit"],
+                            "description": "The temperature unit to use. Infer this from the users location.",
+                        },
+                    },
+                    "required": ["location", "format"],
+                },
+            },
+        }
+    ]
+    params = CreateChatCompletionRequest(
+        model="bloom-560m",
+        messages=messages,
+        stream=False,
+        max_tokens=100,
+        tools=tools,
+        tool_choice="auto",
+        chat_template="{% for message in messages %}"
+        "{{ message.content }} You have these tools: {% for tool in tools %} {{ eos_token }}"
+        "{% endfor %}{% endfor %}",
+    )
+    request = ChatCompletionRequest(params=params, context={})
+    response = await bloom_model.create_chat_completion(request)
+
+    assert response.choices[0].message.content
